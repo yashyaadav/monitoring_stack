@@ -86,10 +86,10 @@ http://<minikube_ip>:<grafana_service_port>
 ```bash
 # To access grafana from local machine (if minikube on EC2), use port forwarding from EC2 instance to local machine
 
-ssh -i "daily_aws_key.pem" -L 3000:192.168.49.2:32592 ubuntu@34.212.146.169
+ssh -i "your_ec2_key.pem" -L 3000:192.168.49.2:32592 ubuntu@34.212.146.169
 
 # For Accessing both Prometheus and Grafana
-ssh -i "daily_aws_key.pem" -L 9090:192.168.49.2:31000 -L 3000:192.168.49.2:32592 ubuntu@34.212.146.169
+ssh -i "your_ec2_key.pem" -L 9090:192.168.49.2:31000 -L 3000:192.168.49.2:32592 ubuntu@34.212.146.169
 
 # Access Grafana UI (from local browser)
 http://localhost:3000
@@ -125,7 +125,7 @@ http://localhost:8080/metrics
 ### Accessing kube-state-metrics from Local Machine
 
 ```bash
-ssh -i "daily_aws_key.pem" -L 9090:192.168.49.2:31000 -L 3000:192.168.49.2:32592 -L 8080:192.168.49.2:30558 ubuntu@34.212.146.169
+ssh -i "your_ec2_key.pem" -L 9090:192.168.49.2:31000 -L 3000:192.168.49.2:32592 -L 8080:192.168.49.2:30558 ubuntu@34.212.146.169
 
 # Port forwarding explanation (on local browser):
 # - 9090: Prometheus
