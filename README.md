@@ -98,6 +98,9 @@ http://localhost:3000
 ## Configuring Prometheus as a Data Source in Grafana
 
 ```bash
+# Login to grafana using admin username and password copied from the install info
+# Go to Home >> Connections >> Data sources
+# Add prometheus as a data source
 # Prometheus URL
 http://<minikube_ip>:<prometheus_service_port>
 http://192.168.49.2:31000
