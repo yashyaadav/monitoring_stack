@@ -1,0 +1,71 @@
+# Apply as a PrometheusRule CR alongside the kube-prometheus-stack install.
+# kubectl -n monitoring apply -f k8s/extra-alerts/app.rules.yml
+#
+# Mirrors compose/prometheus/alerts/app.rules.yml so behavior is identical
+# across the Compose and Kubernetes deployment paths.
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: monitoring-stack-app
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring-stack
+    release: kps   # must match the kube-prometheus-stack release name
+spec:
+  groups:
+    - name: app.rules
+      rules:
+        - alert: AppDown
+          expr: up{job="app"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Sample app is DOWN"
+            description: "Prometheus has been unable to scrape job=app for 2 minutes."
+            runbook_url: "https://github.com/yashyaadav/monitoring_stack/blob/main/docs/RUNBOOK.md#appdown"
+
+        - alert: AppHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{job="app",code=~"5.."}[5m]))
+              / sum(rate(http_requests_total{job="app"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Sample app 5xx error rate above 5% over 5m"
+            description: "More than 5% of requests are returning 5xx for at least 5 minutes."
+            runbook_url: "https://github.com/yashyaadav/monitoring_stack/blob/main/docs/RUNBOOK.md#apphigherrorrate"
+
+        - alert: AppHighLatencyP95
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_request_duration_seconds_bucket{job="app"}[5m]))
+            ) > 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Sample app p95 latency above 1s over 10m"
+            description: "95th-percentile request duration is above 1 second."
+            runbook_url: "https://github.com/yashyaadav/monitoring_stack/blob/main/docs/RUNBOOK.md#apphighlatencyp95"
+
+        - alert: AppSLOBurnRateFast
+          expr: |
+            (
+              sum(rate(http_requests_total{job="app",code=~"5.."}[5m]))
+                / sum(rate(http_requests_total{job="app"}[5m]))
+            ) > (14.4 * 0.01)
+            and
+            (
+              sum(rate(http_requests_total{job="app",code=~"5.."}[1h]))
+                / sum(rate(http_requests_total{job="app"}[1h]))
+            ) > (14.4 * 0.01)
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Sample app burning error budget fast"
+            description: "Multi-window burn rate (5m & 1h) exceeds 14.4x — 28d budget exhausted in ~2 days at this rate."
+            runbook_url: "https://github.com/yashyaadav/monitoring_stack/blob/main/docs/RUNBOOK.md#appsloburnratefast"

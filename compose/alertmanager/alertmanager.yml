@@ -1,0 +1,48 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: webhook-default
+  group_by: [alertname, severity, job]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: webhook-critical
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers:
+        - severity = "warning"
+      receiver: webhook-default
+
+receivers:
+  # NOTE: example.invalid is reserved (RFC 6761) and never resolves.
+  # Replace with a real receiver (Slack/PagerDuty/Opsgenie) for production use;
+  # commented stubs below show the shape.
+  - name: webhook-default
+    webhook_configs:
+      - url: http://example.invalid/hook/default
+        send_resolved: true
+    # slack_configs:
+    #   - api_url: https://hooks.slack.com/services/REPLACE/ME/PLEASE
+    #     channel: '#alerts-warning'
+    #     send_resolved: true
+
+  - name: webhook-critical
+    webhook_configs:
+      - url: http://example.invalid/hook/critical
+        send_resolved: true
+    # pagerduty_configs:
+    #   - service_key: REPLACE_ME
+    #     send_resolved: true
+
+inhibit_rules:
+  # If the app is DOWN, suppress derivative alerts about that same app.
+  - source_matchers:
+      - alertname = "AppDown"
+      - severity = "critical"
+    target_matchers:
+      - alertname =~ "AppHighErrorRate|AppHighLatencyP95|AppSLOBurnRateFast"
+    equal: [job]

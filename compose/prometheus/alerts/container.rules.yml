@@ -1,0 +1,24 @@
+groups:
+  - name: container.rules
+    rules:
+      - alert: ContainerRestartingFrequently
+        expr: increase(container_start_time_seconds{name!=""}[15m]) > 2
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} restarted more than twice in 15m"
+          description: "container_start_time_seconds incremented more than twice in the last 15 minutes."
+          runbook_url: "https://github.com/yashyaadav/monitoring_stack/blob/main/docs/RUNBOOK.md#containerrestartingfrequently"
+
+      - alert: ContainerHighMemoryUsage
+        expr: |
+          (container_memory_working_set_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) > 0.9
+            and container_spec_memory_limit_bytes{name!=""} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} memory usage above 90% of its limit"
+          description: "Working set is above 90% of the configured container memory limit for 10 minutes."
+          runbook_url: "https://github.com/yashyaadav/monitoring_stack/blob/main/docs/RUNBOOK.md#containerhighmemoryusage"

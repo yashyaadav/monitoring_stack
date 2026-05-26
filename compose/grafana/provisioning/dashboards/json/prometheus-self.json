@@ -1,0 +1,114 @@
+{
+  "uid": "ms-prom-self",
+  "title": "Prometheus — Self",
+  "tags": ["monitoring-stack", "prometheus", "meta"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Targets UP",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "refId": "A", "expr": "sum(up)" }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Targets DOWN",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "refId": "A", "expr": "sum(up == 0)" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "TSDB head series",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "refId": "A", "expr": "prometheus_tsdb_head_series" }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Samples ingested /s",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "refId": "A", "expr": "rate(prometheus_tsdb_head_samples_appended_total[1m])" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Scrape duration by job",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{job}}",
+          "expr": "avg by (job) (scrape_duration_seconds)"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Rule evaluation duration (p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{rule_group}}",
+          "expr": "histogram_quantile(0.95, sum by (le, rule_group) (rate(prometheus_rule_evaluation_duration_seconds_bucket[5m])))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Alertmanager notifications sent /s",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{integration}}",
+          "expr": "sum by (integration) (rate(alertmanager_notifications_total[1m]))"
+        }
+      ]
+    }
+  ]
+}

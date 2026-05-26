@@ -1,160 +1,95 @@
+# Monitoring Stack
 
-# Prometheus and Grafana Setup on Minikube (Local and EC2 Instance)
+[![stack-smoke](https://github.com/yashyaadav/monitoring_stack/actions/workflows/stack-smoke.yml/badge.svg)](https://github.com/yashyaadav/monitoring_stack/actions/workflows/stack-smoke.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Last commit](https://img.shields.io/github/last-commit/yashyaadav/monitoring_stack)
 
-## Installing Helm
+A Prometheus + Grafana + Alertmanager observability stack you can clone and exercise end-to-end in under a minute. Built as a DevOps/SRE portfolio piece — production-shaped, not production-ready.
 
-```bash
-# To install helm
-curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-chmod 700 get_helm.sh
-./get_helm.sh
+## What's inside
+
+- **Instrumented Go service** with `/api/{fast,slow,error,flaky}` endpoints, a histogram, a counter, and an in-flight gauge — enough variety to make dashboards interesting and fire a real burn-rate alert.
+- **Docker Compose stack** (Prometheus 2.55, Grafana 11.2, Alertmanager 0.27, node-exporter, cadvisor, app) — every image pinned, every service healthchecked.
+- **Three hand-built Grafana dashboards** provisioned from JSON — app RED, host + containers, Prometheus self-monitoring. No copy-pasted community imports.
+- **~10 alert rules** across host / container / app categories, including a multi-window multi-burn-rate SLO alert from the Google SRE workbook.
+- **Alertmanager config** with severity-based routing and an `AppDown`-inhibits-derivatives rule.
+- **GitHub Actions smoke test** — every PR boots the entire stack and asserts Prometheus targets are UP, rule groups loaded, Grafana healthy.
+- **Three deployment paths** — `docker compose` (default), Kubernetes via `kube-prometheus-stack` ([k8s/](k8s/)), or single-instance AWS EC2 via Terraform ([terraform/](terraform/)).
+- **Runbooks for every alert** ([docs/RUNBOOK.md](docs/RUNBOOK.md)) — the SRE artifact most demo repos skip.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  App[sample-app:8080<br/>/metrics] -- scrape --> Prom
+  NE[node-exporter] -- scrape --> Prom
+  CA[cadvisor] -- scrape --> Prom
+  Prom[Prometheus<br/>rules + TSDB] -- alerts --> AM[Alertmanager]
+  AM -- webhook --> Receiver[(External receiver)]
+  Prom -- query --> Graf[Grafana<br/>provisioned dashboards]
 ```
 
-## Creating a namespace monitoring in the kubernetes cluster
-```bash
-# Create a namespace monitoring 
-kubectl create namespace monitoring
-```
+Full diagram with component table: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Adding Helm Repo for Prometheus
-```bash
-# Add helm chart for prometheus
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-
-# Update the repo
-helm repo update
-```
-
-## Installing Prometheus
+## 30-second quick start
 
 ```bash
-# Installing prometheus in monitoring namespace
-helm install prometheus prometheus-community/prometheus --namespace monitoring
+git clone https://github.com/yashyaadav/monitoring_stack.git
+cd monitoring_stack
+cp .env.example .env
+make up                # docker compose up -d --wait
+make smoke             # asserts targets UP, rules loaded, Grafana healthy
 ```
 
-### Exposing Prometheus Service
+| URL                              | What                              |
+| -------------------------------- | --------------------------------- |
+| http://localhost:3000            | Grafana (admin / admin)           |
+| http://localhost:9090            | Prometheus                        |
+| http://localhost:9093            | Alertmanager                      |
+| http://localhost:8080/metrics    | Sample app metrics                |
+
+## Fire an alert (the money shot)
 
 ```bash
-# Expose prometheus service (would change type from cluster IP to node port and create a new service)
-kubectl expose service prometheus-server --namespace=monitoring --type=NodePort --target-port=9090 --name=prometheus-server-ext
-
-# To get minikube IP for Kubernetes cluster
-minikube ip
-
-# To check if the prometheus is running
-# From the minikube cluster
-http://<minikube-IP>:<port_no_of_exposed_prom_service>
-# For example
-http://192.168.49.2:31000/
+make load-error   # ./scripts/load.sh error 300
 ```
 
-### Accessing Prometheus from Local Machine (if minikube cluster on EC2 Instance)
+After ~5 minutes, `AppHighErrorRate` transitions Pending → Firing in Prometheus (http://localhost:9090/alerts) and Alertmanager (http://localhost:9093). Stop the app entirely (`docker compose stop app`) and `AppDown` fires within 2 minutes, with `AppHighErrorRate`/`AppHighLatencyP95`/`AppSLOBurnRateFast` suppressed by the inhibition rule.
 
-```bash
-# To access prometheus server from local machine from the minikube cluster on EC2 instance, use port forwarding
-ssh -i "your_ec2_key.pem" -L 9090:192.168.49.2:31000 ubuntu@your_ec2_public_ip
+## Docs
 
-# Access Prometheus UI from local browser
-http://localhost:9090
-```
+| Doc                                              | What's in it                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md)          | Component table, full data-flow diagram, scope decisions.                   |
+| [INSTALLATION.md](docs/INSTALLATION.md)          | All three deployment paths step-by-step.                                    |
+| [CONFIGURATION.md](docs/CONFIGURATION.md)        | "I want to change X" → which file to edit.                                  |
+| [ALERTING.md](docs/ALERTING.md)                  | Rule catalog, routing, inhibition, wiring real receivers.                   |
+| [SLOs.md](docs/SLOs.md)                          | The 99% availability SLO + multi-window burn-rate alert math.               |
+| [RUNBOOK.md](docs/RUNBOOK.md)                    | One section per alert: symptoms / causes / commands / remediation.          |
+| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)    | Common local-setup pitfalls.                                                |
+| [CONTRIBUTING.md](CONTRIBUTING.md)               | Lint/test commands and the PR checklist for adding new rules.               |
 
-## Installing Grafana
+## Other deployment paths
 
-```bash
-# Add helm repo for grafana
-helm repo add grafana https://grafana.github.io/helm-charts
+- **Kubernetes** — [k8s/](k8s/) ships a [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) values file plus a `PrometheusRule` CR for the app. One `helm upgrade --install`.
+- **AWS EC2** — [terraform/](terraform/) is a single-file Terraform module that provisions one EC2 instance, installs Docker, and runs the Compose stack via `user_data`. Demo-grade; explicitly not multi-env.
 
-# Update the helm repo
-helm repo update
+## Why this exists / what I learned
 
-# Install grafana in the monitoring namespace
-helm install grafana grafana/grafana --namespace monitoring
-```
+I built this because the previous version of this repo was a Helm-install transcript: useful as a tutorial, not as a portfolio piece. The rebuild forced me to make opinionated calls a tutorial avoids:
 
-### Exposing Grafana Service
+- **What does "production-shaped" actually look like for a demo?** Pinned image versions, healthchecks everywhere, alerts paired with runbooks, an SLO with budget math rather than a flat threshold. Not production-ready — there's no remote-write, no Loki/Tempo, no auth in front of Grafana — but every artifact is the same *shape* as its production counterpart.
+- **Dashboards-as-code beats imported dashboards.** Three hand-built JSONs that I can read in a diff is more useful than thirty community imports I can't reason about.
+- **Inhibition is the alert design choice that matters most.** A naive ruleset pages you 3× when one thing dies (`AppDown` + `AppHighErrorRate` + `AppSLOBurnRateFast`). The inhibit rule is the difference between an SRE setup and an alert-spam machine.
+- **The runbook is the highest-signal artifact in the whole repo.** I'd rather ship 10 alerts with runbooks than 50 without.
 
-```bash
-# Expose Grafana service
-kubectl expose service grafana --type=NodePort --target-port=3000 --name=grafana-ext -n monitoring
+### What I'd add next
 
-# Access grafana from minikube host
-http://<minikube_ip>:<grafana_service_port>
-```
+- Loki + Promtail for the logs plane; correlate from a Grafana alert into the relevant log slice.
+- Tempo for traces, with the sample app emitting OpenTelemetry spans on `/api/slow` to demonstrate trace exemplars in Prometheus histograms.
+- Recording rules for the SLO SLI, mirrored in Grafana panels so dashboards and alerts read the same materialized series.
+- A slow-burn companion to `AppSLOBurnRateFast` (24h / 3d windows) once the service has enough history to make slow burn meaningful.
 
-### Accessing Grafana from Local Machine
+## License
 
-```bash
-# To access grafana from local machine (if minikube on EC2), use port forwarding from EC2 instance to local machine
-
-ssh -i "your_ec2_key.pem" -L 3000:192.168.49.2:32592 ubuntu@34.212.146.169
-
-# For Accessing both Prometheus and Grafana
-ssh -i "your_ec2_key.pem" -L 9090:192.168.49.2:31000 -L 3000:192.168.49.2:32592 ubuntu@34.212.146.169
-
-# Access Grafana UI (from local browser)
-http://localhost:3000
-```
-
-## Configuring Prometheus as a Data Source in Grafana
-
-```bash
-# Login to grafana using admin username and password copied from the install info
-# Go to Home >> Connections >> Data sources
-# Add prometheus as a data source
-# Prometheus URL
-http://<minikube_ip>:<prometheus_service_port>
-http://192.168.49.2:31000
-```
-
-### Importing Dashboards
-
-```bash
-# Create dashboards in Grafana using import (Dashboard ID: 3662 for Prometheus 2.0 Overview)
-```
-
-## Exposing kube-state-metrics in Prometheus
-
-```bash
-# Expose prometheus-kube-state-metrics service in monitoring namespace
-kubectl expose service prometheus-kube-state-metrics --type=NodePort --target-port=8080 --name=prometheus-kube-state-metrics-ext -n monitoring
-
-# To access prometheus-kube-state-metrics-ext service
-http://<minikube_ip>:<service_port>
-
-# Since using port forwarding, access via:
-http://localhost:8080/metrics
-```
-
-### Accessing kube-state-metrics from Local Machine
-
-```bash
-ssh -i "your_ec2_key.pem" -L 9090:192.168.49.2:31000 -L 3000:192.168.49.2:32592 -L 8080:192.168.49.2:30558 ubuntu@34.212.146.169
-
-# Port forwarding explanation (on local browser):
-# - 9090: Prometheus
-# - 3000: Grafana
-# - 8080: kube-state-metrics
-```
-
-## Configuring Prometheus to Scrape kube-state-metrics
-
-```bash
-# Add scraping job for kube-state-metrics in prometheus-server config map
-# Target URL: http://<minikube_ip>:<service_port>
-# Since using port forwarding, target URL: http://localhost:8080
-
-# To get and edit config maps
-kubectl get cm
-kubectl edit cm <config_map_name> -n monitoring
-# For example
-kubectl edit cm prometheus-server -n monitoring
-
-# This job is for scraping kube-state-metrics
-- job_name: state_metrics
-  static_configs:
-  - targets:
-    - localhost:8080 # It would be minikube_ip:node_port if we are running minikube on local machine and not the EC2 Instance
-
-# After editing the config map, do a rollout restart
-kubectl rollout restart deployment prometheus-server -n monitoring
-```
+[MIT](LICENSE).

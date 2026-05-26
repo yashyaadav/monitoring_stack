@@ -1,0 +1,16 @@
+.git
+.github
+.gitignore
+.editorconfig
+.dockerignore
+.env
+.env.*
+**/*.md
+docs/
+compose/
+k8s/
+terraform/
+scripts/
+Makefile
+LICENSE
+coverage.out

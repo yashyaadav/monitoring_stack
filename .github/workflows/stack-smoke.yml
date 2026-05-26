@@ -1,0 +1,49 @@
+name: stack-smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stack-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Boot stack and run smoke checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Docker / Compose versions
+        run: |
+          docker version
+          docker compose version
+          jq --version
+
+      - name: Boot the stack
+        run: docker compose -f compose/docker-compose.yml up -d --wait
+
+      - name: Show running services
+        if: always()
+        run: docker compose -f compose/docker-compose.yml ps
+
+      - name: Wait for first Prometheus scrape cycle
+        run: sleep 20
+
+      - name: Run smoke checks
+        run: ./scripts/smoke.sh
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f compose/docker-compose.yml logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f compose/docker-compose.yml down -v

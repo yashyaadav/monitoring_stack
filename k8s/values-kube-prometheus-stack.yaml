@@ -1,0 +1,115 @@
+# Custom values for prometheus-community/kube-prometheus-stack.
+# Apply with:
+#   helm upgrade --install kps prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace \
+#     -f k8s/values-kube-prometheus-stack.yaml
+
+fullnameOverride: kps
+
+# Built-in defaults from the chart are fine — we only override what matters.
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false        # demo cluster won't have etcd metrics exposed
+    general: true
+    k8sContainerCpuUsageSecondsTotal: true
+    kubeApiserverSlos: false
+
+# ───────────────────────────── Prometheus ─────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    retentionSize: 5GiB
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    externalLabels:
+      cluster: portfolio-demo
+      env: dev
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    # Mount all PrometheusRule CRs matching the operator's defaults plus our custom one.
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+  # Additional scrape config for the sample app via a ServiceMonitor (see below).
+  additionalServiceMonitors: []
+
+# ───────────────────────────── Alertmanager ──────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: webhook-default
+      group_by: [alertname, severity, job]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - matchers:
+            - severity = "critical"
+          receiver: webhook-critical
+          group_wait: 10s
+          repeat_interval: 1h
+        - matchers:
+            - severity = "warning"
+          receiver: webhook-default
+    receivers:
+      - name: webhook-default
+        webhook_configs:
+          - url: http://example.invalid/hook/default
+            send_resolved: true
+      - name: webhook-critical
+        webhook_configs:
+          - url: http://example.invalid/hook/critical
+            send_resolved: true
+    inhibit_rules:
+      - source_matchers:
+          - alertname = "AppDown"
+          - severity = "critical"
+        target_matchers:
+          - alertname =~ "AppHighErrorRate|AppHighLatencyP95|AppSLOBurnRateFast"
+        equal: [job]
+
+# ───────────────────────────── Grafana ───────────────────────────────
+grafana:
+  # IMPORTANT: override on the command line via --set grafana.adminPassword=...
+  # or load from a Secret. The literal `prom-operator` default is fine for a demo
+  # but must not be used anywhere reachable from the internet.
+  adminPassword: prom-operator
+  defaultDashboardsEnabled: true
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      folder: /tmp/dashboards
+      searchNamespace: ALL
+      provider:
+        foldersFromFilesStructure: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+# ───────────────────────────── kube-state-metrics ────────────────────
+kube-state-metrics:
+  enabled: true
+
+# ───────────────────────────── node-exporter ─────────────────────────
+nodeExporter:
+  enabled: true

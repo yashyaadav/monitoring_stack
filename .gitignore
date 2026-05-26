@@ -1,0 +1,38 @@
+# Local env
+.env
+.env.*
+!.env.example
+
+# Runtime state mounted into containers
+grafana-data/
+prometheus-data/
+alertmanager-data/
+
+# Build artifacts
+app/sample-app
+coverage.out
+*.test
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+
+# Kubernetes
+*.kubeconfig
+kubeconfig
+
+# Secrets
+*.pem
+*.key
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
